@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mon Planning Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root { --fc-border-color: #334155; --fc-page-bg-color: #0f172a; }
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
+        .fc { max-width: 1100px; margin: 0 auto; background: #1e293b; padding: 20px; border-radius: 15px; border: 1px solid #334155; }
+        .fc-timegrid-slot { height: 40px !important; } /* Hauteur des blocs pour que les 5 min soient lisibles */
+        .fc-event { cursor: pointer; border: none !important; background: #3b82f6 !important; }
+    </style>
+</head>
+<body class="p-4 sm:p-10">
+
+    <h1 class="text-3xl font-bold mb-8 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+        📅 Mon Agenda Interactif
+    </h1>
+
+    <div id="calendar"></div>
+
+    <script>
+        const SUPABASE_URL = "https://rwnpkpaupqdzcbdeinte.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_BRjmV607G1s8-PUy1AOWcw_OyxT353N"; // ⚠️ METS TA CLÉ ICI
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            const calendarEl = document.getElementById('calendar');
+            
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'timeGridWeek', // Vue semaine avec heures
+                locale: 'fr',
+                slotDuration: '00:05:00',   // ⚡ Graduation toutes les 5 minutes
+                slotLabelInterval: '00:30:00', // Affiche l'heure toutes les 30 min pour pas surcharger
+                allDaySlot: false,
+                selectable: true,           // ✅ Permet de cliquer/glisser dans le vide
+                editable: true,
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'timeGridWeek,timeGridDay'
+                },
+
+                // 1. Charger les devoirs depuis Supabase
+                events: async function(info, successCallback, failureCallback) {
+                    const { data, error } = await supabaseClient.from('assignments').select('*');
+                    if (error) return failureCallback(error);
+                    
+                    // On transforme tes données pour FullCalendar
+                    const events = data.map(item => ({
+                        id: item.id,
+                        title: item.subject,
+                        start: item.due_date, // Assure-toi que le format est ISO (YYYY-MM-DDTHH:mm)
+                        description: item.description
+                    }));
+                    successCallback(events);
+                },
+
+                // 2. Création au clic (Espace vide)
+                select: async function(selectionInfo) {
+                    const title = prompt("Nom du nouvel événement :");
+                    if (title) {
+                        const newEvent = {
+                            subject: title,
+                            due_date: selectionInfo.startStr,
+                            description: "Créé manuellement"
+                        };
+                        
+                        const { data, error } = await supabaseClient.from('assignments').insert([newEvent]).select();
+                        if (!error) {
+                            calendar.addEvent({
+                                id: data[0].id,
+                                title: title,
+                                start: selectionInfo.startStr
+                            });
+                        }
+                    }
+                    calendar.unselect();
+                },
+
+                // 3. Suppression au clic sur un événement
+                eventClick: async function(info) {
+                    if (confirm("Voulez-vous supprimer cet événement ?")) {
+                        const { error } = await supabaseClient.from('assignments').delete().eq('id', info.event.id);
+                        if (!error) info.event.remove();
+                    }
+                }
+            });
+
+            calendar.render();
+        });
+    </script>
+</body>
+</html>
