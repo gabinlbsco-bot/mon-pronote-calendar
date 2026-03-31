@@ -2,96 +2,143 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Mon Planning Pro</title>
+    <title>Mon Dashboard Planning</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root { --fc-border-color: #334155; --fc-page-bg-color: #0f172a; }
-        body { background-color: #0f172a; color: white; font-family: sans-serif; }
-        .fc { max-width: 1100px; margin: 0 auto; background: #1e293b; padding: 20px; border-radius: 15px; border: 1px solid #334155; }
-        .fc-timegrid-slot { height: 40px !important; } /* Hauteur des blocs pour que les 5 min soient lisibles */
-        .fc-event { cursor: pointer; border: none !important; background: #3b82f6 !important; }
+        body { background-color: #0f172a; color: white; height: 100vh; display: flex; overflow: hidden; }
+        .sidebar { width: 320px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; }
+        .calendar-area { flex: 1; padding: 20px; position: relative; }
+        .fc { background: #1e293b; border-radius: 12px; padding: 10px; height: 100% !important; border: 1px solid #334155; }
+        .external-event { background: #334155; padding: 10px; margin-bottom: 8px; border-radius: 8px; cursor: grab; border-left: 4px solid #3b82f6; font-size: 0.9rem; }
+        .external-event:hover { background: #475569; }
+        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
     </style>
 </head>
-<body class="p-4 sm:p-10">
+<body>
 
-    <h1 class="text-3xl font-bold mb-8 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-        📅 Mon Agenda Interactif
-    </h1>
+    <div class="sidebar p-4">
+        <h2 class="text-xl font-bold mb-6 text-blue-400">📋 Devoirs à placer</h2>
+        <div id="external-events" class="flex-1 overflow-y-auto">
+            </div>
+        <div class="mt-4 p-3 bg-blue-900/30 rounded text-xs text-blue-200 italic">
+            Glisse un devoir dans le calendrier pour fixer l'heure.
+        </div>
+    </div>
 
-    <div id="calendar"></div>
+    <div class="calendar-area">
+        <div id="calendar"></div>
+    </div>
+
+    <div id="modal">
+        <div class="bg-slate-800 p-6 rounded-xl border border-blue-500 w-80 shadow-2xl">
+            <h3 class="text-lg font-bold mb-4">Nouvel événement</h3>
+            <input id="evTitle" type="text" placeholder="Titre..." class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded outline-none text-white">
+            <select id="evType" class="w-full p-2 mb-6 bg-slate-900 border border-slate-700 rounded text-white">
+                <option value="task">Devoir 📚</option>
+                <option value="event">Perso 🏠</option>
+            </select>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeModal()" class="text-gray-400">Annuler</button>
+                <button onclick="saveEvent()" class="bg-blue-600 px-4 py-2 rounded font-bold hover:bg-blue-500">Créer</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const SUPABASE_URL = "https://rwnpkpaupqdzcbdeinte.supabase.co";
-        const SUPABASE_ANON_KEY = "sb_publishable_BRjmV607G1s8-PUy1AOWcw_OyxT353N"; // ⚠️ METS TA CLÉ ICI
+        const SUPABASE_ANON_KEY = "TA_CLE_ANON_ICI"; // ⚠️ METS TA CLÉ ICI
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let calendar;
+        let selectedInfo;
 
         document.addEventListener('DOMContentLoaded', async function() {
             const calendarEl = document.getElementById('calendar');
-            
-            const calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'timeGridWeek', // Vue semaine avec heures
+            const containerEl = document.getElementById('external-events');
+
+            // 1. Charger les devoirs non placés depuis la table 'devoirs'
+            const { data: list } = await supabaseClient.from('devoirs').select('*').eq('is_placed', false);
+            if (list) {
+                list.forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = 'external-event fc-event';
+                    el.innerText = `[${item.matiere}] ${item.titre}`;
+                    el.setAttribute('data-id', item.id);
+                    containerEl.appendChild(el);
+                    new FullCalendar.Draggable(el, { eventData: { title: item.titre, id: item.id } });
+                });
+            }
+
+            // 2. Initialiser le Calendrier
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'timeGridWeek',
                 locale: 'fr',
-                slotDuration: '00:05:00',   // ⚡ Graduation toutes les 5 minutes
-                slotLabelInterval: '00:30:00', // Affiche l'heure toutes les 30 min pour pas surcharger
-                allDaySlot: false,
-                selectable: true,           // ✅ Permet de cliquer/glisser dans le vide
+                slotDuration: '00:05:00',
+                selectable: true,
                 editable: true,
-                headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'timeGridWeek,timeGridDay'
+                droppable: true,
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' },
+
+                // Quand on glisse un devoir
+                drop: async function(info) {
+                    const id = info.draggedEl.getAttribute('data-id');
+                    await supabaseClient.from('devoirs').update({ 
+                        due_date: info.dateStr, 
+                        is_placed: true 
+                    }).eq('id', id);
+                    info.draggedEl.remove();
                 },
 
-                // 1. Charger les devoirs depuis Supabase
-                events: async function(info, successCallback, failureCallback) {
-                    const { data, error } = await supabaseClient.from('assignments').select('*');
-                    if (error) return failureCallback(error);
-                    
-                    // On transforme tes données pour FullCalendar
-                    const events = data.map(item => ({
-                        id: item.id,
-                        title: item.subject,
-                        start: item.due_date, // Assure-toi que le format est ISO (YYYY-MM-DDTHH:mm)
-                        description: item.description
-                    }));
-                    successCallback(events);
+                // Afficher les événements placés
+                events: async function(info, successCallback) {
+                    const { data } = await supabaseClient.from('devoirs').select('*').eq('is_placed', true);
+                    successCallback(data.map(d => ({
+                        id: d.id,
+                        title: d.titre,
+                        start: d.due_date,
+                        backgroundColor: d.type === 'event' ? '#8b5cf6' : '#3b82f6',
+                        borderColor: 'transparent'
+                    })));
                 },
 
-                // 2. Création au clic (Espace vide)
-                select: async function(selectionInfo) {
-                    const title = prompt("Nom du nouvel événement :");
-                    if (title) {
-                        const newEvent = {
-                            subject: title,
-                            due_date: selectionInfo.startStr,
-                            description: "Créé manuellement"
-                        };
-                        
-                        const { data, error } = await supabaseClient.from('assignments').insert([newEvent]).select();
-                        if (!error) {
-                            calendar.addEvent({
-                                id: data[0].id,
-                                title: title,
-                                start: selectionInfo.startStr
-                            });
-                        }
-                    }
-                    calendar.unselect();
+                // Créer au clic (Ouvre la modale)
+                select: function(info) {
+                    selectedInfo = info;
+                    document.getElementById('modal').style.display = 'flex';
                 },
 
-                // 3. Suppression au clic sur un événement
+                // Supprimer au clic
                 eventClick: async function(info) {
-                    if (confirm("Voulez-vous supprimer cet événement ?")) {
-                        const { error } = await supabaseClient.from('assignments').delete().eq('id', info.event.id);
-                        if (!error) info.event.remove();
+                    if (confirm(`Supprimer "${info.event.title}" ?`)) {
+                        await supabaseClient.from('devoirs').delete().eq('id', info.event.id);
+                        info.event.remove();
                     }
                 }
             });
 
             calendar.render();
         });
+
+        function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+        async function saveEvent() {
+            const title = document.getElementById('evTitle').value;
+            const type = document.getElementById('evType').value;
+            if (title) {
+                const { data, error } = await supabaseClient.from('devoirs').insert([{
+                    titre: title,
+                    due_date: selectedInfo.startStr,
+                    is_placed: true,
+                    type: type
+                }]).select();
+                
+                if (!error) calendar.refetchEvents();
+            }
+            closeModal();
+            document.getElementById('evTitle').value = "";
+        }
     </script>
 </body>
 </html>
