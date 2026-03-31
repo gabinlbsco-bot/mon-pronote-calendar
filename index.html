@@ -7,14 +7,13 @@
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: white; height: 100vh; display: flex; overflow: hidden; font-family: sans-serif; }
+        body { background-color: #0f172a; color: white; height: 100vh; display: flex; overflow: hidden; }
         .sidebar { width: 320px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; }
         .calendar-area { flex: 1; padding: 20px; }
         .fc { background: #1e293b; border-radius: 12px; padding: 10px; height: 100% !important; border: 1px solid #334155; color: white; }
         .external-event { background: #334155; padding: 10px; margin-bottom: 8px; border-radius: 8px; cursor: grab; border-left: 4px solid #3b82f6; font-size: 0.85rem; }
         .external-event:hover { background: #475569; }
         #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center; }
-        .fc-v-event { border: none !important; }
     </style>
 </head>
 <body>
@@ -31,14 +30,14 @@
 
     <div id="modal">
         <div class="bg-slate-800 p-6 rounded-xl border border-blue-500 w-96 shadow-2xl">
-            <h3 id="modalTitle" class="text-lg font-bold mb-4 text-white">Modifier l'élément</h3>
-            <label class="text-xs text-gray-400 uppercase font-bold">Nom de la tâche</label>
+            <h3 id="modalTitle" class="text-lg font-bold mb-4">Gérer l'élément</h3>
+            <label class="text-xs text-gray-400 uppercase font-bold">Nom</label>
             <input id="evInput" type="text" class="w-full p-2 mt-1 mb-4 bg-slate-900 border border-slate-700 rounded text-white outline-none focus:border-blue-400">
             
             <div id="typeSelector">
-                <label class="text-xs text-gray-400 uppercase font-bold">Type</label>
+                <label class="text-xs text-gray-400 uppercase font-bold">Catégorie</label>
                 <select id="evType" class="w-full p-2 mt-1 mb-4 bg-slate-900 border border-slate-700 rounded text-white">
-                    <option value="task">Devoir 📚 (Apparaît à gauche)</option>
+                    <option value="task">Devoir 📚 (Visible à gauche)</option>
                     <option value="event">Perso 🏠 (Calendrier seul)</option>
                 </select>
             </div>
@@ -47,7 +46,7 @@
                 <button id="btnDelete" class="text-red-500 hover:text-red-400 text-sm font-bold underline">Supprimer</button>
                 <div class="flex gap-2">
                     <button onclick="closeModal()" class="text-gray-400 px-4 py-2">Annuler</button>
-                    <button id="btnSave" class="bg-blue-600 px-5 py-2 rounded-lg font-bold hover:bg-blue-500 transition">Enregistrer</button>
+                    <button id="btnSave" class="bg-blue-600 px-5 py-2 rounded-lg font-bold hover:bg-blue-500">Enregistrer</button>
                 </div>
             </div>
         </div>
@@ -68,32 +67,31 @@
             calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
                 initialView: 'timeGridWeek',
                 locale: 'fr',
+                // --- TES RÉGLAGES DE PRÉCISION ---
+                slotDuration: '00:05:00', 
+                snapDuration: '00:05:00',
+                slotMinTime: "07:00:00",
+                // ---------------------------------
                 editable: true,
                 droppable: true,
                 selectable: true,
-                slotMinTime: "07:00:00",
                 headerToolbar: { left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' },
 
-                // Afficher les événements qui ont une date
                 events: async function(info, successCallback) {
                     const { data } = await supabaseClient.from('devoirs').select('*').not('due_date', 'is', null);
                     successCallback(data.map(d => ({
                         id: d.id, title: d.titre, start: d.due_date,
-                        backgroundColor: d.type === 'event' ? '#8b5cf6' : '#3b82f6'
+                        backgroundColor: d.type === 'event' ? '#8b5cf6' : '#3b82f6',
+                        borderColor: 'transparent'
                     })));
                 },
 
-                // GLISSER UN DEVOIR
                 drop: async function(info) {
                     const id = info.draggedEl.getAttribute('data-id');
-                    await supabaseClient.from('devoirs').update({ 
-                        due_date: info.dateStr, 
-                        is_placed: true 
-                    }).eq('id', id);
+                    await supabaseClient.from('devoirs').update({ due_date: info.dateStr, is_placed: true }).eq('id', id);
                     calendar.refetchEvents();
                 },
 
-                // CLIQUER POUR MODIFIER / SUPPRIMER
                 eventClick: function(info) {
                     activeId = info.event.id;
                     document.getElementById('modalTitle').innerText = "Modifier";
@@ -103,7 +101,6 @@
                     document.getElementById('modal').style.display = 'flex';
                 },
 
-                // CLIQUER VIDE POUR CRÉER
                 select: function(info) {
                     activeId = null;
                     activeDate = info.startStr;
@@ -120,7 +117,6 @@
         async function initSidebar() {
             const container = document.getElementById('external-events');
             container.innerHTML = "";
-            // On affiche TOUS les devoirs (type 'task') à gauche
             const { data } = await supabaseClient.from('devoirs').select('*').eq('type', 'task');
             data?.forEach(item => {
                 const el = document.createElement('div');
@@ -137,12 +133,9 @@
         document.getElementById('btnSave').onclick = async function() {
             const val = document.getElementById('evInput').value;
             if (!val) return;
-
             if (activeId) {
-                // UPDATE (Renommer)
                 await supabaseClient.from('devoirs').update({ titre: val }).eq('id', activeId);
             } else {
-                // INSERT (Nouveau)
                 const type = document.getElementById('evType').value;
                 await supabaseClient.from('devoirs').insert([{ titre: val, due_date: activeDate, type: type, is_placed: true }]);
             }
@@ -152,7 +145,7 @@
         };
 
         document.getElementById('btnDelete').onclick = async function() {
-            if (confirm("Supprimer cette tâche ?")) {
+            if (confirm("Supprimer définitivement ?")) {
                 await supabaseClient.from('devoirs').delete().eq('id', activeId);
                 closeModal();
                 calendar.refetchEvents();
