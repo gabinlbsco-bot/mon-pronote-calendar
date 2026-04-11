@@ -3,179 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mon Dashboard Planning Pro</title>
-    
+    <title>Mon Planning - Accès Libre</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-
     <style>
         body { background: #0f172a; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; margin: 0; }
         @media (min-width: 768px) { body { flex-direction: row; } }
-
-        /* Sidebar */
-        .sidebar { width: 100%; height: 35%; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 15px; z-index: 10; }
-        @media (min-width: 768px) { .sidebar { width: 350px; height: 100vh; } }
-
-        /* Calendrier Area */
-        .calendar-area { flex: 1; padding: 15px; height: 100%; overflow: hidden; position: relative; }
-        #calendar { background: #1e293b; border-radius: 12px; padding: 10px; height: 100%; border: 1px solid #334155; }
-
-        /* Events */
+        .sidebar { width: 100%; height: 35%; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 15px; }
+        @media (min-width: 768px) { .sidebar { width: 320px; height: 100vh; } }
+        .calendar-area { flex: 1; padding: 10px; height: 100%; overflow: hidden; }
+        #calendar { background: #1e293b; border-radius: 8px; padding: 5px; height: 100%; }
         .external-event { background: #334155; padding: 10px; margin-bottom: 8px; border-radius: 8px; cursor: grab; border-left: 4px solid #3b82f6; font-size: 0.85rem; }
         .event-done { opacity: 0.4; text-decoration: line-through; border-left-color: #10b981 !important; }
-
-        /* Modale */
         #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; }
-        
-        /* Personnalisation FullCalendar pour mode sombre */
-        .fc { color: white !important; }
-        .fc-list-day-cushion, .fc-col-header-cell-cushion { color: white !important; }
-        .fc-timegrid-slot { height: 3em !important; border-bottom: 1px dotted #334155 !important; }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
-        <h2 class="text-xl font-bold mb-4 text-blue-400 flex items-center gap-2"><span>📋</span> Mes Devoirs</h2>
-        
-        <input id="searchBar" type="text" placeholder="Rechercher un devoir..." 
-               class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded-lg text-sm outline-none focus:border-blue-500 text-white">
-        
-        <div id="external-events" class="flex-1 overflow-y-auto space-y-2 pr-1">
-            <p class="text-xs text-gray-500">Chargement des devoirs...</p>
-        </div>
-
-        <button onclick="clearPlacements()" class="mt-4 w-full py-2 bg-red-900/20 text-red-400 text-xs rounded border border-red-900/50 hover:bg-red-900/40 transition">
-            Vider le calendrier
-        </button>
+        <h2 class="text-xl font-bold mb-4 text-blue-400">📋 Liste de devoirs</h2>
+        <input id="searchBar" type="text" placeholder="Rechercher..." class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded text-sm outline-none text-white">
+        <div id="external-events" class="flex-1 overflow-y-auto pr-1"></div>
     </div>
 
-    <div class="calendar-area">
-        <div id="calendar"></div>
-    </div>
+    <div class="calendar-area"><div id="calendar"></div></div>
 
     <div id="modal">
         <div class="bg-slate-800 p-6 rounded-xl border border-blue-500 w-80 shadow-2xl">
-            <h3 id="modalTitle" class="text-lg font-bold mb-4">Gérer la tâche</h3>
-            
-            <label class="text-[10px] text-gray-400 uppercase font-bold">Nom</label>
-            <input id="evInput" type="text" class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded text-white outline-none focus:border-blue-500">
-            
-            <div id="typeSection">
-                <label class="text-[10px] text-gray-400 uppercase font-bold">Catégorie</label>
-                <select id="evType" class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded text-white text-sm">
-                    <option value="task">Devoir 📚</option>
-                    <option value="event">Perso 🏠</option>
-                </select>
-            </div>
-
-            <label class="flex items-center gap-2 mb-6 cursor-pointer">
-                <input type="checkbox" id="evDone" class="w-4 h-4 rounded bg-slate-900 border-slate-700">
-                <span class="text-sm text-gray-300">Marquer comme fini</span>
-            </label>
-
-            <div class="flex justify-between items-center">
-                <button id="btnDelete" class="text-red-500 text-xs font-bold underline hover:text-red-400">Supprimer</button>
+            <h3 class="font-bold mb-4">Modifier la tâche</h3>
+            <input id="evInput" type="text" class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded text-white outline-none">
+            <div class="flex justify-between items-center mt-4">
+                <button id="btnDelete" class="text-red-500 text-xs underline">Supprimer</button>
                 <div class="flex gap-2">
-                    <button onclick="closeModal()" class="text-gray-400 px-3 py-2 text-sm">Annuler</button>
-                    <button id="btnSave" class="bg-blue-600 px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-500 transition">Enregistrer</button>
+                    <button onclick="closeModal()" class="text-gray-400 text-sm">Annuler</button>
+                    <button id="btnSave" class="bg-blue-600 px-4 py-2 rounded font-bold text-sm">OK</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // CONFIGURATION SUPABASE
-        const SUPABASE_URL = "https://rwnpkpaupqdzcbdeinte.supabase.co";
-        const SUPABASE_ANON_KEY = "sb_publishable_BRjmV607G1s8-PUy1AOWcw_OyxT353N";
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Initialisation avec vos identifiants réels
+        const sb = supabase.createClient("https://rwnpkpaupqdzcbdeinte.supabase.co", "sb_publishable_BRjmV607G1s8-PUy1AOWcw_OyxT353N");
+        let calendar, activeId = null, activeDate = null;
 
-        let calendar;
-        let activeId = null;
-        let activeDate = null;
-
-        // INITIALISATION
         document.addEventListener('DOMContentLoaded', function() {
             initCalendar();
             initSidebar();
-            
-            // Barre de recherche
-            document.getElementById('searchBar').addEventListener('input', initSidebar);
+            document.getElementById('searchBar').oninput = initSidebar;
         });
 
         function initCalendar() {
-            const calendarEl = document.getElementById('calendar');
-            calendar = new FullCalendar.Calendar(calendarEl, {
+            calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
                 initialView: 'timeGridWeek',
                 locale: 'fr',
                 slotDuration: '00:05:00',
-                snapDuration: '00:05:00',
                 nowIndicator: true,
                 editable: true,
                 droppable: true,
                 selectable: true,
-                headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'timeGridWeek,timeGridDay'
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' },
+                events: async (info, success) => {
+                    // Utilisation de due_data pour les dates
+                    const { data } = await sb.from('devoirs').select('*').not('due_data', 'is', null);
+                    success(data.map(d => ({
+                        id: d.id, title: d.titre, start: d.due_data,
+                        backgroundColor: d.titre.toLowerCase().includes('math') ? '#ef4444' : '#3b82f6'
+                    })));
                 },
-
-                // Charger les événements depuis Supabase
-                events: async function(info, successCallback, failureCallback) {
-                    try {
-                        const { data, error } = await sb.from('devoirs').select('*').not('due_date', 'is', null);
-                        if (error) throw error;
-                        
-                        const events = data.map(d => ({
-                            id: d.id,
-                            title: d.titre,
-                            start: d.due_date,
-                            backgroundColor: d.type === 'event' ? '#8b5cf6' : (d.titre.toLowerCase().includes('math') ? '#ef4444' : '#3b82f6'),
-                            borderColor: 'transparent',
-                            className: d.is_done ? 'event-done' : ''
-                        }));
-                        successCallback(events);
-                    } catch (err) {
-                        console.error("Erreur chargement événements:", err);
-                        failureCallback(err);
-                    }
-                },
-
-                // Déposer un devoir de la sidebar vers le calendrier
-                drop: async function(info) {
+                drop: async (info) => {
                     const id = info.draggedEl.getAttribute('data-id');
-                    const newDate = info.dateStr;
-                    
-                    await sb.from('devoirs').update({ due_date: newDate, is_placed: true }).eq('id', id);
-                    refreshAll();
+                    await sb.from('devoirs').update({ due_data: info.dateStr, is_placed: true }).eq('id', id);
+                    refresh();
                 },
-
-                // Modifier un événement existant
-                eventClick: function(info) {
+                eventClick: (info) => {
                     activeId = info.event.id;
-                    activeDate = null;
-                    
-                    document.getElementById('modalTitle').innerText = "Modifier l'élément";
                     document.getElementById('evInput').value = info.event.title;
-                    document.getElementById('evDone').checked = info.event.classNames.includes('event-done');
-                    
-                    document.getElementById('typeSection').classList.add('hidden');
-                    document.getElementById('btnDelete').classList.remove('hidden');
                     document.getElementById('modal').style.display = 'flex';
                 },
-
-                // Créer un nouvel événement au clic dans le calendrier
-                select: function(info) {
-                    activeId = null;
-                    activeDate = info.startStr;
-                    
-                    document.getElementById('modalTitle').innerText = "Nouvelle tâche";
+                select: (info) => {
+                    activeId = null; activeDate = info.startStr;
                     document.getElementById('evInput').value = "";
-                    document.getElementById('evDone').checked = false;
-                    
-                    document.getElementById('typeSection').classList.remove('hidden');
-                    document.getElementById('btnDelete').classList.add('hidden');
                     document.getElementById('modal').style.display = 'flex';
                 }
             });
@@ -183,85 +92,35 @@
         }
 
         async function initSidebar() {
+            // Filtrage par type "task"
+            const { data } = await sb.from('devoirs').select('*').eq('type', 'task');
             const container = document.getElementById('external-events');
+            container.innerHTML = "";
             const search = document.getElementById('searchBar').value.toLowerCase();
-
-            try {
-                const { data, error } = await sb.from('devoirs').select('*').eq('type', 'task');
-                if (error) throw error;
-
-                container.innerHTML = "";
-                const filtered = data.filter(i => i.titre.toLowerCase().includes(search));
-
-                if (filtered.length === 0) {
-                    container.innerHTML = "<p class='text-xs text-gray-500 italic text-center py-4'>Aucun devoir trouvé</p>";
-                }
-
-                filtered.forEach(item => {
-                    const el = document.createElement('div');
-                    el.className = `external-event fc-event ${item.is_done ? 'event-done' : ''}`;
-                    el.innerText = item.titre;
-                    el.setAttribute('data-id', item.id);
-                    container.appendChild(el);
-
-                    // Rendre l'élément déplaçable
-                    new FullCalendar.Draggable(el, {
-                        eventData: { title: item.titre, id: item.id }
-                    });
-                });
-            } catch (err) {
-                console.error("Erreur sidebar:", err);
-            }
+            data?.filter(i => i.titre.toLowerCase().includes(search)).forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'external-event fc-event';
+                el.innerText = item.titre;
+                el.setAttribute('data-id', item.id);
+                container.appendChild(el);
+                new FullCalendar.Draggable(el, { eventData: { title: item.titre, id: item.id } });
+            });
         }
 
-        // --- GESTION MODALE ---
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
-
-        document.getElementById('btnSave').onclick = async function() {
-            const title = document.getElementById('evInput').value;
-            const done = document.getElementById('evDone').checked;
-            
-            if (!title) return alert("Donne un nom !");
-
-            if (activeId) {
-                // MISE À JOUR
-                await sb.from('devoirs').update({ titre: title, is_done: done }).eq('id', activeId);
-            } else {
-                // CRÉATION
-                const type = document.getElementById('evType').value;
-                await sb.from('devoirs').insert([{
-                    titre: title,
-                    due_date: activeDate,
-                    type: type,
-                    is_done: done,
-                    is_placed: true
-                }]);
-            }
-            
-            closeModal();
-            refreshAll();
+        
+        document.getElementById('btnSave').onclick = async () => {
+            const t = document.getElementById('evInput').value;
+            if (activeId) await sb.from('devoirs').update({ titre: t }).eq('id', activeId);
+            else await sb.from('devoirs').insert([{ titre: t, due_data: activeDate, type: 'task', is_placed: true }]);
+            closeModal(); refresh();
         };
 
-        document.getElementById('btnDelete').onclick = async function() {
-            if (activeId && confirm("Supprimer définitivement ?")) {
-                await sb.from('devoirs').delete().eq('id', activeId);
-                closeModal();
-                refreshAll();
-            }
+        document.getElementById('btnDelete').onclick = async () => {
+            if (confirm("Supprimer ?")) { await sb.from('devoirs').delete().eq('id', activeId); closeModal(); refresh(); }
         };
 
-        // --- OUTILS ---
-        async function clearPlacements() {
-            if (confirm("Réinitialiser toutes les dates du calendrier ?")) {
-                await sb.from('devoirs').update({ due_date: null, is_placed: false }).not('due_date', 'is', null);
-                refreshAll();
-            }
-        }
-
-        function refreshAll() {
-            calendar.refetchEvents();
-            initSidebar();
-        }
+        function refresh() { calendar.refetchEvents(); initSidebar(); }
     </script>
 </body>
 </html>
