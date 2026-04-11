@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mon Planning - Accès Libre</title>
+    <title>Planning Pro - Accès Libre</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,45 +13,47 @@
         .sidebar { width: 100%; height: 35%; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 15px; }
         @media (min-width: 768px) { .sidebar { width: 320px; height: 100vh; } }
         .calendar-area { flex: 1; padding: 10px; height: 100%; overflow: hidden; }
-        #calendar { background: #1e293b; border-radius: 8px; padding: 5px; height: 100%; }
+        #calendar { background: #1e293b; border-radius: 12px; padding: 10px; height: 100%; border: 1px solid #334155; color: white; }
         .external-event { background: #334155; padding: 10px; margin-bottom: 8px; border-radius: 8px; cursor: grab; border-left: 4px solid #3b82f6; font-size: 0.85rem; }
-        .event-done { opacity: 0.4; text-decoration: line-through; border-left-color: #10b981 !important; }
         #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; }
+        .fc-v-event { border: none !important; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
-        <h2 class="text-xl font-bold mb-4 text-blue-400">📋 Liste de devoirs</h2>
-        <input id="searchBar" type="text" placeholder="Rechercher..." class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded text-sm outline-none text-white">
-        <div id="external-events" class="flex-1 overflow-y-auto pr-1"></div>
+        <h2 class="text-xl font-bold mb-4 text-blue-400">📋 Devoirs à placer</h2>
+        <div id="external-events" class="flex-1 overflow-y-auto space-y-2 pr-1">
+            </div>
+        <button onclick="resetAll()" class="mt-4 w-full py-2 bg-red-900/20 text-red-400 text-[10px] rounded border border-red-900/50">Vider le planning</button>
     </div>
 
-    <div class="calendar-area"><div id="calendar"></div></div>
+    <div class="calendar-area">
+        <div id="calendar"></div>
+    </div>
 
     <div id="modal">
         <div class="bg-slate-800 p-6 rounded-xl border border-blue-500 w-80 shadow-2xl">
-            <h3 class="font-bold mb-4">Modifier la tâche</h3>
-            <input id="evInput" type="text" class="w-full p-2 mb-4 bg-slate-900 border border-slate-700 rounded text-white outline-none">
-            <div class="flex justify-between items-center mt-4">
+            <h3 class="text-lg font-bold mb-4">Éditer la tâche</h3>
+            <input id="evInput" type="text" class="w-full p-2 mb-6 bg-slate-900 border border-slate-700 rounded text-white outline-none">
+            <div class="flex justify-between items-center">
                 <button id="btnDelete" class="text-red-500 text-xs underline">Supprimer</button>
                 <div class="flex gap-2">
-                    <button onclick="closeModal()" class="text-gray-400 text-sm">Annuler</button>
-                    <button id="btnSave" class="bg-blue-600 px-4 py-2 rounded font-bold text-sm">OK</button>
+                    <button onclick="closeModal()" class="text-gray-400 px-3 py-2 text-sm">Fermer</button>
+                    <button id="btnSave" class="bg-blue-600 px-4 py-2 rounded-lg font-bold text-sm">Enregistrer</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Initialisation avec vos identifiants réels
+        // Configuration avec tes infos réelles
         const sb = supabase.createClient("https://rwnpkpaupqdzcbdeinte.supabase.co", "sb_publishable_BRjmV607G1s8-PUy1AOWcw_OyxT353N");
         let calendar, activeId = null, activeDate = null;
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', () => {
             initCalendar();
             initSidebar();
-            document.getElementById('searchBar').oninput = initSidebar;
         });
 
         function initCalendar() {
@@ -64,24 +66,27 @@
                 droppable: true,
                 selectable: true,
                 headerToolbar: { left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' },
+                
                 events: async (info, success) => {
-                    // Utilisation de due_data pour les dates
                     const { data } = await sb.from('devoirs').select('*').not('due_data', 'is', null);
                     success(data.map(d => ({
                         id: d.id, title: d.titre, start: d.due_data,
-                        backgroundColor: d.titre.toLowerCase().includes('math') ? '#ef4444' : '#3b82f6'
+                        backgroundColor: d.matiere.toLowerCase().includes('physique') ? '#a855f7' : '#3b82f6'
                     })));
                 },
+
                 drop: async (info) => {
                     const id = info.draggedEl.getAttribute('data-id');
                     await sb.from('devoirs').update({ due_data: info.dateStr, is_placed: true }).eq('id', id);
                     refresh();
                 },
+
                 eventClick: (info) => {
                     activeId = info.event.id;
                     document.getElementById('evInput').value = info.event.title;
                     document.getElementById('modal').style.display = 'flex';
                 },
+
                 select: (info) => {
                     activeId = null; activeDate = info.startStr;
                     document.getElementById('evInput').value = "";
@@ -92,12 +97,11 @@
         }
 
         async function initSidebar() {
-            // Filtrage par type "task"
-            const { data } = await sb.from('devoirs').select('*').eq('type', 'task');
             const container = document.getElementById('external-events');
+            // On affiche seulement ceux qui ne sont pas encore placés
+            const { data } = await sb.from('devoirs').select('*').eq('is_placed', false);
             container.innerHTML = "";
-            const search = document.getElementById('searchBar').value.toLowerCase();
-            data?.filter(i => i.titre.toLowerCase().includes(search)).forEach(item => {
+            data?.forEach(item => {
                 const el = document.createElement('div');
                 el.className = 'external-event fc-event';
                 el.innerText = item.titre;
@@ -112,13 +116,20 @@
         document.getElementById('btnSave').onclick = async () => {
             const t = document.getElementById('evInput').value;
             if (activeId) await sb.from('devoirs').update({ titre: t }).eq('id', activeId);
-            else await sb.from('devoirs').insert([{ titre: t, due_data: activeDate, type: 'task', is_placed: true }]);
+            else await sb.from('devoirs').insert([{ titre: t, due_data: activeDate, is_placed: true, type: 'task', matiere: 'Perso' }]);
             closeModal(); refresh();
         };
 
         document.getElementById('btnDelete').onclick = async () => {
             if (confirm("Supprimer ?")) { await sb.from('devoirs').delete().eq('id', activeId); closeModal(); refresh(); }
         };
+
+        async function resetAll() {
+            if (confirm("Réinitialiser le calendrier ?")) {
+                await sb.from('devoirs').update({ due_data: null, is_placed: false }).not('due_data', 'is', null);
+                refresh();
+            }
+        }
 
         function refresh() { calendar.refetchEvents(); initSidebar(); }
     </script>
